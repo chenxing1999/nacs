@@ -1,9 +1,6 @@
-# import torchdatasets as td
-
 from torch.utils.data import Dataset
 
-# from torchdatasets import Dataset
-from datasets.datasets import get_dataset
+from src.datasets.datasets import get_dataset
 
 
 class IndexedDataset(Dataset):
