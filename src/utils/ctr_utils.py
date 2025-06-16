@@ -1,5 +1,6 @@
 import torch
 from sklearn.metrics import roc_auc_score
+
 from src.utils.dataset_utils import convert_to_oov
 
 
@@ -41,7 +42,6 @@ def evaluate_model(
 
         outputs = torch.sigmoid(outputs)
         all_y_pred.extend(outputs.cpu().tolist())
-
 
     if generator:
         tmp = torch.randperm(len(all_y_true), generator=generator)[:10].tolist()

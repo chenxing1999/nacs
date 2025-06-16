@@ -5,6 +5,7 @@ import torch
 from loguru import logger
 from torch import nn
 
+
 class DeepFM(nn.Module):
     def __init__(
         self,

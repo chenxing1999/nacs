@@ -1,5 +1,6 @@
 import torch
-from torch.utils.data import Subset, ConcatDataset
+from torch.utils.data import ConcatDataset, Subset
+
 from src.datasets import IndexedDataset
 
 device = "cuda"

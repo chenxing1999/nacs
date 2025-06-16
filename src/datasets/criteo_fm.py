@@ -1,4 +1,5 @@
 """based on TorchFm Criteo implementation"""
+
 import math
 import shutil
 import struct
@@ -11,9 +12,9 @@ import lmdb
 import numpy as np
 import torch
 from loguru import logger
+from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from torch.utils.data import Dataset
 
 class CriteoDataset(Dataset):
     """
@@ -70,7 +71,6 @@ class CriteoDataset(Dataset):
             self.field_dims = np.frombuffer(
                 txn.get(b"field_dims"), dtype=np.uint32
             ).astype(np.int64)
-
 
     def __getitem__(self, index):
         index = self._line_in_dataset[index]
@@ -179,7 +179,6 @@ class CriteoDataset(Dataset):
         logger.info(f"Field dims {self.field_dims}")
         logger.info(f"sum dims {sum(self.field_dims)}")
 
-
     def get_target(self):
         train_target = np.zeros((len(self)), dtype=np.int32)
         batch_size = 2048
@@ -192,8 +191,6 @@ class CriteoDataset(Dataset):
             train_target[start:end] = target
             start = end
         return train_target
-
-
 
 
 @lru_cache(maxsize=None)

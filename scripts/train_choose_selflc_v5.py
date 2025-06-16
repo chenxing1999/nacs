@@ -1,31 +1,23 @@
-import sys
-import os
-
-import torch
-from torch.utils.data import DataLoader, Subset
-from torch.nn import functional as F
-from typing import Tuple, List, Optional, Set
-import numpy as np
-import random
-
-from src.models import get_model
-from src.utils import get_args
-from src.utils.selflc import ProSelfLC
-from src.datasets import IndexedDataset
-from src.utils import facility_location_torch, facility_location_torch_v2
-from src.utils.losses import tce_loss, rce_loss 
-
-from sklearn.metrics import roc_auc_score
-from torch.utils.tensorboard import SummaryWriter
 import math
-
+import os
+import random
 import time
+from typing import List, Optional, Tuple
+
+import numpy as np
+import torch
 import tqdm
+from sklearn.metrics import roc_auc_score
+from torch.nn import functional as F
+from torch.utils.data import DataLoader, Subset
+from torch.utils.tensorboard import SummaryWriter
+
+from src.datasets import IndexedDataset
+from src.models import get_model
+from src.utils import facility_location_torch_v2, get_args
+from src.utils.selflc import ProSelfLC
 
 start_time = time.time()
-
-
-
 
 
 # Use CUDA if available and set random seed for reproducibility
@@ -61,7 +53,7 @@ split = "train"
 if args.dataset in ["criteo_cl", "avazu_cl"]:
     split = "old"
 
-train_dataset = IndexedDataset(args, train=True, train_transform=True, split=split) 
+train_dataset = IndexedDataset(args, train=True, train_transform=True, split=split)
 train_loader = DataLoader(
     train_dataset,
     args.batch_size,
@@ -87,7 +79,7 @@ val_loader = torch.utils.data.DataLoader(
 model = get_model(train_dataset, args.arch)
 model = model.to(device)
 
-if args.arch == "deepfm"  and args.dataset == "avazu" and data_size == 0.05:
+if args.arch == "deepfm" and args.dataset == "avazu" and data_size == 0.05:
     optimizer = torch.optim.Adam(model.parameters(), 0.01, weight_decay=1e-5)
 elif args.arch == "deepfm":
     optimizer = torch.optim.Adam(model.parameters(), 0.01, weight_decay=5e-5)
@@ -111,7 +103,6 @@ step = 0
 sum_loss = 0
 output_dir = "outputs/data_logs/"
 os.makedirs(output_dir, exist_ok=True)
-
 
 
 def generate_random_set(
@@ -157,12 +148,11 @@ def generate_random_set(
     return indices
 
 
-
 class CustomLazier:
 
     def __init__(
         self,
-        random_set_indices: torch.Tensor, 
+        random_set_indices: torch.Tensor,
         cur_subset: torch.Tensor,
     ):
         # Check if any element from random belong to cur_subset
@@ -176,19 +166,12 @@ class CustomLazier:
 
         self.start = 0
 
-
     def set_start_set(self, class_indices):
-        # mask = self.random_set_indices[class_indices].unsqueeze(0) == self.cur_subset.unsqueeze(1)
-        # try:
-        #     location = torch.where(mask)
-        # except:
-        #     import pdb; pdb.set_trace()
-        # self.start_results = set(location[1].cpu().tolist())
-        mask = torch.isin(self.random_set_indices[class_indices], self.cur_subset, assume_unique=True)
+        mask = torch.isin(
+            self.random_set_indices[class_indices], self.cur_subset, assume_unique=True
+        )
         location = torch.nonzero(mask, as_tuple=True)[0]
         self.start_results = set(location.cpu().tolist())
-
-
 
     def __call__(self, sims, num_per_class, N) -> Tuple[List[int], List[float]]:
 
@@ -242,7 +225,7 @@ def find_top_grad(
     batches=100,
     random_batch_size=16384,
     equal_num=True,
-    final_subset: Optional[torch.Tensor]=None,
+    final_subset: Optional[torch.Tensor] = None,
 ):
     model.eval()
     # preds = torch.zeros(
@@ -253,8 +236,8 @@ def find_top_grad(
     assert equal_num, "Speed-up version not support equal_num=False"
     assert random_batch_size * batches % 2 == 0
 
-    n_batch = 8 # number of batch compute together
-    n_loop = (batches - 1) // n_batch + 1
+    n_batch = 8  # number of batch compute together
+    (batches - 1) // n_batch + 1
 
     start_gen_time = time.time()
     total_data = random_batch_size * batches // 2
@@ -272,23 +255,17 @@ def find_top_grad(
     all_positives = torch.concat(all_positives)[:total_data]
     all_positives = all_positives.reshape(batches, -1)
 
-    # pos_loc_tmp = torch.randperm(len(pos_location))[:total_data]
-    # all_positives = pos_location[pos_loc_tmp].reshape(batches, -1)
-    # all_positives = torch.tensor(random.choices(pos_location, k=total_data)).reshape(batches, -1)
     neg_loc_tmp = torch.randperm(len(neg_location))[:total_data]
     all_negatives = neg_location[neg_loc_tmp].reshape(batches, -1)
-
 
     print("total", time.time() - start_gen_time)
 
     # (batches, random_batch_size)
     full_batch_idx = torch.concat([all_positives, all_negatives], dim=-1).flatten()
 
-
     # import pdb; pdb.set_trace()
     # sanity check
     subset_dataset = Subset(train_dataset, full_batch_idx)
-
 
     loader = DataLoader(
         subset_dataset,
@@ -317,11 +294,9 @@ def find_top_grad(
         gradient = torch.autograd.grad(loss, tmp_pred)[0]
         # gradient = tmp_pred - identity_matrix[targets[tmp_index]]
 
-        mom = (momentum * 0.9 + gradient * 0.1) / (1 - 0.9 ** num_step)
-        var = (grad_var * 0.999 + gradient * gradient * 0.001) / (1 - 0.999 ** num_step)
+        mom = (momentum * 0.9 + gradient * 0.1) / (1 - 0.9**num_step)
+        var = (grad_var * 0.999 + gradient * gradient * 0.001) / (1 - 0.999**num_step)
         gradient = mom / (1e-6 + var.sqrt())
-
-
 
         # start choose coreset
         pos_gradient = gradient.view(-1, random_batch_size // 2)[::2]
@@ -336,8 +311,9 @@ def find_top_grad(
             pos_gradient, subset_size // 2 // batches, mask
         )
 
-        pos_subset = pos_index[torch.arange(n_batch).unsqueeze(-1), pos_subset].flatten()
-
+        pos_subset = pos_index[
+            torch.arange(n_batch).unsqueeze(-1), pos_subset
+        ].flatten()
 
         # Repeat for negative
         neg_gradient = gradient.view(-1, random_batch_size // 2)[1::2]
@@ -350,12 +326,12 @@ def find_top_grad(
         neg_subset = facility_location_torch_v2.faciliy_location_order(
             neg_gradient, subset_size // 2 // batches, mask
         )
-        neg_subset = neg_index[torch.arange(n_batch).unsqueeze(-1), neg_subset].flatten()
+        neg_subset = neg_index[
+            torch.arange(n_batch).unsqueeze(-1), neg_subset
+        ].flatten()
 
         final_subset = torch.concat([final_subset, pos_subset, neg_subset])
 
-
-    
     final_weight = None
     # return torch.unique(torch.concat(final_subset)).cpu(), final_weight
     # Note: Final Weight is currently implement wrong. Please dont use
@@ -389,7 +365,6 @@ if data_size == 0.05:
 
 n_splits = args.n_splits
 print(f"k={k}")
-
 
 
 def train_epoch_simple(train_loader, model, optimizer):
@@ -427,7 +402,6 @@ def train_epoch_simple2(
     sum_loss = 0
     step = 0
     # criterion = torch.nn.BCEWithLogitsLoss()
-    identity_matrix = torch.eye(2, device=args.device)
     for data, target, _ in train_loader:
         data = data.to(device)
         target = target.to(device)
@@ -437,7 +411,8 @@ def train_epoch_simple2(
         y_pred = torch.clamp(y_pred, eps, 1 - eps)
 
         loss = criterion(
-            y_pred, target.float(), 
+            y_pred,
+            target.float(),
             total_step + step,
         )
 
@@ -498,14 +473,15 @@ if args.arch == "dcnv2" and args.dataset == "criteo_cl":
 grad_var = torch.tensor(0, device=device)
 momentum = torch.tensor(0, device=device)
 criterion_selflc = ProSelfLC(
-    (intervals * sum(range(1, n_splits+1))) * len(train_loader),
+    (intervals * sum(range(1, n_splits + 1))) * len(train_loader),
     # 27 * len(train_loader),
     # int(27 * len(train_loader) * 0.01 // 3),
-    16, 0.5
+    16,
+    0.5,
 )
 
 final_subset, weight = find_top_grad(
-    train_dataset, 
+    train_dataset,
     int(k // n_splits),
     # k // 5,
     model,
@@ -526,7 +502,6 @@ train_loader = DataLoader(dataset, 8192, True, num_workers=4)
 count = 1
 
 
-
 n_epoches = intervals * n_splits + 1
 
 # for epoch in range(100):
@@ -534,7 +509,11 @@ for epoch in range(100):
     print(f"Epoch: {epoch:02d}")
     # Train model
     step, sum_loss, momentum, grad_var = train_epoch_simple2(
-        train_loader, model, optimizer, momentum, grad_var,
+        train_loader,
+        model,
+        optimizer,
+        momentum,
+        grad_var,
         criterion_selflc,
     )
     # step, sum_loss = train_epoch_simple(train_loader, model, optimizer)
@@ -548,7 +527,7 @@ for epoch in range(100):
         else:
             k_size = k // n_splits
         final_subset, weight = find_top_grad(
-            train_dataset, 
+            train_dataset,
             k_size,
             # k * 2 // 5,
             model,
@@ -562,12 +541,10 @@ for epoch in range(100):
         count += 1
         # torch.save(final_subset, "subset_crest.pth")
 
-
     # Validation
     model.eval()
 
-
-    device = 'cuda'
+    device = "cuda"
     criterion = torch.nn.BCEWithLogitsLoss(reduction="sum")
     criterion = criterion.to(device)
 
@@ -596,10 +573,10 @@ for epoch in range(100):
         auc = 0.5
         log_loss = 1.0
 
-
     improve = False
     if auc > best_auc:
         from pathlib import Path
+
         folder = f"outputs/{run_name}/"
         os.makedirs(folder, exist_ok=True)
         folder = Path(folder)
@@ -611,9 +588,11 @@ for epoch in range(100):
     best_auc = max(auc, best_auc)
     train_loss = sum_loss / step
 
-    print(f"{epoch=}"\
-          f"-- {train_loss=:.4f}"\
-          f"-- {auc=:.4f} -- {log_loss=:.4f} -- {best_auc=:.4f}\n")
+    print(
+        f"{epoch=}"
+        f"-- {train_loss=:.4f}"
+        f"-- {auc=:.4f} -- {log_loss=:.4f} -- {best_auc=:.4f}\n"
+    )
 
     writer.add_scalar("train/loss", train_loss, total_step)
     writer.add_scalar("val/loss", log_loss, total_step)

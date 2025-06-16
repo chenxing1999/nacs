@@ -4,7 +4,10 @@ from torch.nn import functional as F
 
 
 def get_entropy(pred_probs):
-    entropy = - (pred_probs * torch.log(pred_probs) + (1 - pred_probs) * torch.log(1 - pred_probs))
+    entropy = -(
+        pred_probs * torch.log(pred_probs)
+        + (1 - pred_probs) * torch.log(1 - pred_probs)
+    )
     return entropy
 
 
@@ -15,13 +18,15 @@ class ProSelfLC(nn.Module):
     exp_base search: [4, 6, 8, 10, 12, 14,]
     transit_time_ratio: [0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
 
-    Note: Currently using the Conference version (Using conf_all, conf_top can be better in some case).
+    Note: Currently using the Conference version
+    (Using conf_all, conf_top can be better in some case).
     """
+
     def __init__(
         self,
-        total_steps: int, 
-        exp_base: int=6,
-        transit_time_ratio: float=0.2,
+        total_steps: int,
+        exp_base: int = 6,
+        transit_time_ratio: float = 0.2,
         relative=False,
     ):
         super().__init__()
@@ -32,7 +37,6 @@ class ProSelfLC(nn.Module):
         self.temperature = 1
         self.conf_method = "all"
         self.relative = relative
-
 
     def update_epsilon_progressive_adaptive(self, pred_probs, cur_time):
         with torch.no_grad():
@@ -56,7 +60,6 @@ class ProSelfLC(nn.Module):
 
             self.epsilon = global_trust * example_trust
 
-
     def forward(
         self,
         preds,
@@ -77,14 +80,16 @@ class ProSelfLC(nn.Module):
 
         new_target_probs = (1 - self.epsilon) * targets + self.epsilon * scaled_preds
         if pos_weight == 1:
-            return F.binary_cross_entropy(preds, new_target_probs.detach(), reduction=reduction, **kwargs)
-
+            return F.binary_cross_entropy(
+                preds, new_target_probs.detach(), reduction=reduction, **kwargs
+            )
 
         if not self.relative:
             new_target_probs = new_target_probs.detach()
-        loss = - pos_weight * new_target_probs * torch.log(preds) - (1 - new_target_probs) * torch.log(1 - preds)
+        loss = -pos_weight * new_target_probs * torch.log(preds) - (
+            1 - new_target_probs
+        ) * torch.log(1 - preds)
 
         if reduction == "mean":
             return loss.mean()
         return loss
-

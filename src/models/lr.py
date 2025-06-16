@@ -1,8 +1,7 @@
+from typing import Dict, List, Optional
+
 import torch
 from torch import nn
-from torch.nn import functional as F
-
-from typing import List, Optional, Dict
 
 
 class LogisticRegression(nn.Module):
@@ -50,7 +49,6 @@ class LogisticRegression(nn.Module):
         )
         offsets = torch.cumsum(field_dims_tensor[:-1], 0).unsqueeze(0)
         self.register_buffer("offsets", offsets)
-
 
     def forward(self, x):
         x = x + self.offsets

@@ -2,15 +2,15 @@ import shutil
 import struct
 from collections import defaultdict
 from pathlib import Path
-from typing import Literal, List
+from typing import List, Literal
 
 import lmdb
 import numpy as np
+import torch
 from loguru import logger
+from torch.utils.data import Dataset
 from tqdm import tqdm
 
-import torch
-from torch.utils.data import Dataset
 
 def get_offsets(field_dims: List[int]) -> torch.Tensor:
     field_dims_tensor = torch.tensor(field_dims)

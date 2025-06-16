@@ -6,7 +6,8 @@ import torch.distributed as dist
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
-from utils import submodular, craig, facility_location_torch
+
+from utils import craig, facility_location_torch, submodular
 
 
 def distribute_subset(subset, weight, ordering_time, similarity_time, pred_time, args):
@@ -61,7 +62,9 @@ def distribute_subset(subset, weight, ordering_time, similarity_time, pred_time,
         torch.Tensor([ordering_time, similarity_time, pred_time]).float().cuda()
     )
     dist.reduce(
-        reduced_times, 0, op=dist.ReduceOp.MAX,
+        reduced_times,
+        0,
+        op=dist.ReduceOp.MAX,
     )
 
     return subset, weight, reduced_times
@@ -171,7 +174,13 @@ class SubsetGenerator:
                 _,
                 ordering_time,
                 similarity_time,
-            ) = submodular.greedy_merge(preds, fl_labels, B, 5, "euclidean",)
+            ) = submodular.greedy_merge(
+                preds,
+                fl_labels,
+                B,
+                5,
+                "euclidean",
+            )
         else:
             if lib_use == "submodlib":
                 (

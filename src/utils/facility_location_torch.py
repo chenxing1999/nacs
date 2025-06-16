@@ -2,23 +2,25 @@
 This file is actually not used in the final version, but I keep it here
 as I think it is useful for future works on submodular optimization.
 """
-import torch
-from torch.nn import functional as F
-from typing import Any, Tuple, List, cast, Set
-import time
+
 import math
+import time
+from typing import List, Set, Tuple
+
 import numpy as np
+import torch
 
 # Keep old code for checking algorithm correctness if necessary
 try:
     from submodlib.functions.facilityLocation import FacilityLocationFunction
+
     from utils.submodular import faciliy_location_order as faciliy_location_order_cpp
-except ImportError as e:
+except ImportError:
     pass
 
 
-
 device = "cuda"
+
 
 @torch.jit.script
 def naive_greed_optimize(
@@ -35,7 +37,7 @@ def naive_greed_optimize(
     cur_values = torch.ones((1, N), device=device) * float("-inf")
     cur_val_sum: float = 0.0
     for _ in range(num_per_class):
-        
+
         # Compute gain: Shape N
         # gain[i] = Score increase with adding i to selected_set
         gain = torch.maximum(sims, cur_values).sum(dim=1) - cur_val_sum
@@ -49,7 +51,6 @@ def naive_greed_optimize(
         cur_val_sum = float(cur_values.sum().item())
 
     return selected_set, gains
-
 
 
 def lazier_torch(
@@ -94,9 +95,6 @@ def lazier_torch(
     return list(results), gains
 
 
-
-
-
 def faciliy_location_order(
     c: int,
     X: torch.Tensor,
@@ -122,7 +120,6 @@ def faciliy_location_order(
     if optimizer_function is None:
         optimizer_function = lazier_torch
 
-
     class_indices = torch.where(y == c)[0]
     if metric != "sims":
         X = X[class_indices]
@@ -132,15 +129,12 @@ def faciliy_location_order(
 
     N = X.shape[0]
 
-
     # TODO: fix monkeypatch below
     if hasattr(optimizer_function, "set_start_set"):
         optimizer_function.set_start_set(class_indices)
 
-
-
     if mode == "dense":
-        num_n = None
+        pass
 
     start = time.time()
 
@@ -161,14 +155,14 @@ def faciliy_location_order(
 
     S_time = time.time() - start
 
-    #---Begin of Greed (line 24 - 30 in original algorithm)
+    # ---Begin of Greed (line 24 - 30 in original algorithm)
     start = time.time()
     # selected_set = []
     # gains = []
     # cur_values = torch.ones((1, N), device=device) * float("-inf")
     # cur_val_sum = 0
     # for _ in range(num_per_class):
-    #     
+    #
     #     # Compute gain: Shape N
     #     # gain[i] = Score increase with adding i to selected_set
     #     gain = torch.zeros(N, device=device)
@@ -198,7 +192,12 @@ def faciliy_location_order(
     sz.index_add_(0, indices, weights[mask])
     sz[torch.where(sz == 0)] = 1
 
-    return class_indices[selected_set].cpu().numpy(), sz.cpu().numpy(), greed_time, S_time
+    return (
+        class_indices[selected_set].cpu().numpy(),
+        sz.cpu().numpy(),
+        greed_time,
+        S_time,
+    )
 
 
 def get_orders_and_weights(
@@ -257,21 +256,29 @@ def get_orders_and_weights(
         # count = count.int()
         num_per_class = (class_nums * B // N).cpu()
 
-
     if verbose:
         print(f"Greedy: selecting {num_per_class} elements")
 
     order_mg_all, cluster_sizes_all, greedy_times, similarity_times = zip(
         *map(
             lambda c: faciliy_location_order(
-                c[1], X, y, metric, num_per_class[c[0]], weights, mode, num_n, optimizer_function
+                c[1],
+                X,
+                y,
+                metric,
+                num_per_class[c[0]],
+                weights,
+                mode,
+                num_n,
+                optimizer_function,
             ),
             enumerate(classes),
         )
     )
     if verbose:
         print(
-            f"time (sec) for computing facility location: {greedy_times} similarity time {similarity_times}",
+            "time (sec) for computing facility location:"
+            f" {greedy_times} similarity time {similarity_times}",
         )
 
     order_mg, weights_mg = [], []
@@ -288,9 +295,7 @@ def get_orders_and_weights(
 
     # len(order_mg_all[c]) = Number of sample in subset belong to class c
     tmp = np.max([len(order_mg_all[c]) / props[c] for c, _ in enumerate(classes)])
-    for i in range(
-        int(np.rint(tmp))
-    ):
+    for i in range(int(np.rint(tmp))):
         for c, _ in enumerate(classes):
             ndx = slice(
                 i * int(props[c]), int(min(len(order_mg_all[c]), (i + 1) * props[c]))
@@ -319,7 +324,7 @@ def faciliy_location_order_new(
 ):
     class_indices = np.where(y == c)[0]
     X = X[class_indices]
-    N = X.shape[0]
+    X.shape[0]
 
     if mode == "dense":
         num_n = None
@@ -375,8 +380,6 @@ def faciliy_location_order_new(
     return class_indices[order], sz, greedy_time, S_time
 
 
-
-
 if __name__ == "__main__":
     num_classes = 2
     N = 1024
@@ -387,13 +390,18 @@ if __name__ == "__main__":
 
     start = time.time()
     result = faciliy_location_order(
-        0, X, y, metric, 256, weights,
+        0,
+        X,
+        y,
+        metric,
+        256,
+        weights,
     )
     print(result)
     print("Torch time:", time.time() - start)
 
     print()
-    print("-"* 10)
+    print("-" * 10)
     print("cpp")
     # obj = FacilityLocationFunction(
     #     n=len(X),
@@ -414,16 +422,12 @@ if __name__ == "__main__":
     y = y.cpu().numpy()
     weights = weights.cpu().numpy()
     start = time.time()
-    result = faciliy_location_order_cpp(
-        0, X, y, metric, 256, weights, "sparse"
-    )
+    result = faciliy_location_order_cpp(0, X, y, metric, 256, weights, "sparse")
     print(result)
     print("CPP time:", time.time() - start)
 
     print()
     start = time.time()
-    result = faciliy_location_order_new(
-        0, X, y, metric, 256, weights, "sparse"
-    )
+    result = faciliy_location_order_new(0, X, y, metric, 256, weights, "sparse")
     print(result)
     print("New time:", time.time() - start)

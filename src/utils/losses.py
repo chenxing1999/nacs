@@ -1,8 +1,7 @@
-import torch 
+import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
-import numpy as np
 
 
 def tce_loss(y, t, drop_rate, pos_weight=None):
@@ -17,15 +16,19 @@ def tce_loss(y, t, drop_rate, pos_weight=None):
 
     ind_update = ind_sorted[:num_remember]
 
-    loss_update = F.binary_cross_entropy_with_logits(y[ind_update], t[ind_update], pos_weight=pos_weight)
+    loss_update = F.binary_cross_entropy_with_logits(
+        y[ind_update], t[ind_update], pos_weight=pos_weight
+    )
 
     return loss_update
 
 
 def rce_loss(y, t, alpha=0.2, pos_weight=None):
-    loss = F.binary_cross_entropy_with_logits(y, t, reduction="none", pos_weight=pos_weight)
+    loss = F.binary_cross_entropy_with_logits(
+        y, t, reduction="none", pos_weight=pos_weight
+    )
     y_ = torch.sigmoid(y).detach()
-    weight = torch.pow(y_, alpha) * t + torch.pow((1-y_), alpha) * (1-t)
+    weight = torch.pow(y_, alpha) * t + torch.pow((1 - y_), alpha) * (1 - t)
     loss_ = loss * weight
     loss_ = torch.mean(loss_)
     return loss_
@@ -37,12 +40,13 @@ class TCE_Loss(nn.Module):
         self.num_iterations = num_iterations
         self.drop_rate = drop_rate
         self.exponent = exponent
-        self.drop_rate_ls = np.linspace(0, self.drop_rate**self.exponent, self.num_iterations)
+        self.drop_rate_ls = np.linspace(
+            0, self.drop_rate**self.exponent, self.num_iterations
+        )
 
     def forward(self, y, t, n_iterations, pos_weight=None):
         drop_rate = self.drop_rate_schedule(n_iterations)
         return tce_loss(y, t, drop_rate, pos_weight)
-
 
     def drop_rate_schedule(self, iteration):
 
@@ -58,12 +62,13 @@ class RCE_Loss(nn.Module):
         self.num_iterations = num_iterations
         self.drop_rate = drop_rate
         self.exponent = exponent
-        self.drop_rate_ls = np.linspace(0, self.drop_rate**self.exponent, self.num_iterations)
+        self.drop_rate_ls = np.linspace(
+            0, self.drop_rate**self.exponent, self.num_iterations
+        )
 
     def forward(self, y, t, n_iterations, pos_weight=None):
         drop_rate = self.drop_rate_schedule(n_iterations)
         return tce_loss(y, t, drop_rate, pos_weight)
-
 
     def drop_rate_schedule(self, iteration):
 
