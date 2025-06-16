@@ -209,3 +209,4 @@ modules/
 env/
 artifacts/
 *.pth
+logs/

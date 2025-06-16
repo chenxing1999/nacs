@@ -3,7 +3,7 @@ from pathlib import Path
 
 import torch
 from torch.nn import functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
 
 from src.datasets import IndexedDataset
@@ -32,21 +32,7 @@ else:
     device = args.device = "cpu"
 
 train_dataset = IndexedDataset(args, train_transform=True)
-# subset_path = "outputs/debugs_main/easy_crest_v7.pth"
-# subset_path = "outputs/dcnv2-criteo-0.01-v2-debug/easy_crest_mc_sub.pth"
-# subset_path = "outputs/deepfm-criteo-0.01-v2-debug/easy_crest_mc_sub_tmp.pth"
-subset_path = "outputs/dcnv2-avazu-0.01-v2-debug/easy_crest_mc_sub.pth"
-subset_path = "outputs/dcnv2-avazu-0.01-v2-efficiency/easy_crest_mc_sub.pth"
 subset_path = args.subset_path
-# subset_path = "outputs/kcenter/avazu_0.05.pth"
-
-# subset_path = "outputs/deepfm-avazu-0.01-v2-debug/easy_crest_mc_sub.pth"
-
-# subset_path = "outputs/dcnv2-criteo-0.005-v2/easy_crest_mc_sub.pth"
-# subset_path = "outputs/dcnv2-criteo-0.05-v2/easy_crest_mc_sub_tmp.pth"
-# subset_path = "outputs/dcnv2-criteo-0.01-v2-debug/easy_crest_mc_sub_tmp.pth"
-# subset_path = "outputs/deepfm-criteo-0.05-v2/easy_crest-full.pth"
-# subset_path = "outputs/debugs_main/subset.pth"
 subset_data = torch.load(subset_path, map_location="cpu")
 
 
@@ -57,12 +43,7 @@ def convert(item):
 
 
 subset_data = list(map(convert, subset_data))
-
-# ori code. Kcenter has some weird bug
-# subset_dataset = Subset(train_dataset, subset_data)
-
-# subset_dataset = Subset(train_dataset, subset_data)
-subset_dataset = train_dataset
+subset_dataset = Subset(train_dataset, subset_data)
 train_loader = DataLoader(
     subset_dataset,
     args.batch_size,
@@ -82,21 +63,14 @@ model = get_model(train_dataset, args.arch)
 model = model.to(device)
 optimizer = torch.optim.Adam(
     model.parameters(),
-    0.001,
-    # weight_decay=5e-4,
-    weight_decay=1e-6,
+    0.01,
+    weight_decay=5e-4,
 )
 print(optimizer)
-# optimizer = torch.optim.Adam(model.parameters(), 1e-3, weight_decay=1e-6)
-# optimizer = torch.optim.Adam(model.parameters(), 1e-4, weight_decay=1e-7)
-# optimizer = torch.optim.SGD(model.parameters(), 0.01, weight_decay=1e-5)
 
 
 criterion_selflc = ProSelfLC(
-    # 4 * len(train_loader),
-    # 20 * len(train_loader),
-    # 25 * len(train_loader),
-    25 * len(train_loader),  # used for Criteo DFM 1%
+    25 * len(train_loader),
     16,
     0.5,
     False,
@@ -110,6 +84,7 @@ sum_loss = 0
 output_dir = "outputs/data_logs/"
 os.makedirs(output_dir, exist_ok=True)
 
+# pos_weight = ratio between num_negatives / num_positives
 if args.dataset == "criteo":
     pos_weight = 1 / (27277461 / 9395032)
 elif args.dataset == "avazu":
@@ -118,8 +93,6 @@ else:
     raise ValueError()
 
 pw = torch.tensor(pos_weight)
-# pos_weight = None
-# pos_weight = 1
 
 
 def train_epoch_simple(train_loader, model, optimizer):
@@ -127,15 +100,10 @@ def train_epoch_simple(train_loader, model, optimizer):
     model.train()
     sum_loss = 0
     step = 0
-    # pw = torch.tensor(5491354 / 26851819)
-    # criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pw)
 
     for data, target, _ in train_loader:
         data = data.to(device)
         target = target.to(device)
-
-        # data = random_mask(data, oov_tokens, 0.01)
-
         y_pred = model(data)
 
         if args.loss == "selflc":
@@ -149,7 +117,6 @@ def train_epoch_simple(train_loader, model, optimizer):
                 pos_weight=pos_weight,
             )
         elif args.loss == "rce":
-            # loss = criterion(y_pred, target.float())
             loss = rce_loss(y_pred, target.float(), pos_weight=pw)
         elif args.loss == "tce":
             loss = criterion_tce(
@@ -191,7 +158,6 @@ for epoch in range(20):
     print(f"Epoch: {epoch:02d}")
     # Train model
     step, sum_loss = train_epoch_simple(train_loader, model, optimizer)
-    # step, sum_loss = train_epoch_simple(train_loader, model, optimizer)
     total_step += step
     # Validation
     model.eval()
@@ -251,7 +217,14 @@ val_loader = torch.utils.data.DataLoader(
     pin_memory=True,
 )
 
-auc, log_loss = evaluate_model(model, val_loader, None, device)
+auc, log_loss = evaluate_model(
+    model,
+    val_loader,
+    None,
+    device,
+    non_oov_tokens,
+    oov_tokens,
+)
 
 print(f"Final AUC {auc:.4f} - LogLoss: {log_loss:.4f}")
 
@@ -260,6 +233,13 @@ best_state = torch.load(loss_model_path)
 model.load_state_dict(best_state)
 model.eval()
 
-auc, log_loss = evaluate_model(model, val_loader, None, device)
+auc, log_loss = evaluate_model(
+    model,
+    val_loader,
+    None,
+    device,
+    non_oov_tokens,
+    oov_tokens,
+)
 
 print(f"Final AUC {auc:.4f} - LogLoss: {log_loss:.4f}")

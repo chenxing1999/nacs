@@ -1,3 +1,10 @@
+"""
+for epoch in range(epoches):
+    train model
+    find top 10% data repreresent gradient
+    log it down
+"""
+
 import math
 import os
 import random
@@ -14,7 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from src.datasets import IndexedDataset
 from src.models import get_model
-from src.utils import facility_location_torch_v2, get_args
+from src.utils import facility_location_torch, get_args
 from src.utils.selflc import ProSelfLC
 
 start_time = time.time()
@@ -29,7 +36,7 @@ start_time = time.time()
 # ])
 args = get_args()
 args.seed = 42
-data_size = args.data_size
+data_size = 0.05
 
 run_name = f"{args.arch}-{args.dataset}-{data_size}-v2-ablation"
 print("Run name", run_name, "initialized")
@@ -60,22 +67,13 @@ train_loader = DataLoader(
     num_workers=4,
     shuffle=True,
 )
-
-targets = torch.zeros(len(train_dataset), dtype=torch.long)
-for x, y, idx in train_loader:
-    targets[idx] = y
-
-neg_location = torch.where(targets == 0)[0]
-pos_location = torch.where(targets == 1)[0]
-
 val_loader = torch.utils.data.DataLoader(
     IndexedDataset(args, train=False),
-    batch_size=8192,
+    batch_size=4096,
     shuffle=False,
     num_workers=args.num_workers,
     pin_memory=True,
 )
-print("Finished loading data")
 
 model = get_model(train_dataset, args.arch)
 model = model.to(device)
@@ -130,20 +128,15 @@ def generate_random_set(
     indices = []
     class_indices = neg_location
     size = int(random_subset_size * neg_ratio)
-    # new_indices = torch.randperm(len(class_indices))
-    # new_indices = torch.multinomial(neg_weight, size)
-    # new_indices = class_indices[new_indices[:size]]
-    new_indices = random.choices(class_indices, k=size)
-    indices.append(torch.tensor(new_indices))
+    new_indices = torch.randperm(len(class_indices))
+    new_indices = class_indices[new_indices[:size]]
+    indices.append(new_indices)
 
     class_indices = pos_location
     size = int(random_subset_size * pos_ratio)
-    # new_indices = torch.randperm(len(class_indices))
-    # new_indices = torch.multinomial(pos_weight, size)
-    # new_indices = class_indices[new_indices[:size]]
-    new_indices = random.choices(class_indices, k=size)
-    indices.append(torch.tensor(new_indices))
-    # indices.append(new_indices)
+    new_indices = torch.randperm(len(class_indices))
+    new_indices = class_indices[new_indices[:size]]
+    indices.append(new_indices)
 
     indices = torch.concat(indices)
     return indices
@@ -233,53 +226,20 @@ def find_top_grad(
     #     (len(train_dataset), 2),
     #     device=device,
     # )
-
-    assert equal_num, "Speed-up version not support equal_num=False"
-    assert random_batch_size * batches % 2 == 0
-
-    n_batch = 8  # number of batch compute together
-    (batches - 1) // n_batch + 1
-
-    start_gen_time = time.time()
-    total_data = random_batch_size * batches // 2
-
-    # Sampling positive so that in each batch there is no repeated
-    # batch_size = (random_batch_size // 2) * n_batch
-    all_positives = []
-    n1 = len(pos_location) // (random_batch_size // 2) // n_batch
-    assert n1 > 0
-    length = (random_batch_size // 2) * n_batch * n1
-    n2 = (total_data - 1) // length + 1
-    for _ in range(n2):
-        pos = torch.randperm(len(pos_location))[:length]
-        all_positives.append(pos_location[pos])
-    all_positives = torch.concat(all_positives)[:total_data]
-    all_positives = all_positives.reshape(batches, -1)
-
-    neg_loc_tmp = torch.randperm(len(neg_location))[:total_data]
-    all_negatives = neg_location[neg_loc_tmp].reshape(batches, -1)
-
-    print("total", time.time() - start_gen_time)
-
-    # (batches, random_batch_size)
-    full_batch_idx = torch.concat([all_positives, all_negatives], dim=-1).flatten()
-
-    # import pdb; pdb.set_trace()
-    # sanity check
-    subset_dataset = Subset(train_dataset, full_batch_idx)
-
+    preds = torch.zeros(len(train_dataset), device=device)
+    targets = torch.zeros(len(train_dataset), dtype=torch.long, device=device)
     loader = DataLoader(
-        subset_dataset,
-        random_batch_size * n_batch,
+        train_dataset,
+        8192 * 4,
         pin_memory=True,
         num_workers=4,
     )
 
-    num_step = total_step + 1
-    for data, target, index in tqdm.tqdm(loader, ascii=True):
+    print("inference....")
+    start_infer = time.time()
+    for data, target, index in loader:
         data = data.to(device)
         target = target.to(device)
-        index = index.to(device)
 
         with torch.no_grad():
             logit = model(data)
@@ -287,61 +247,82 @@ def find_top_grad(
         y_pred = torch.sigmoid(logit)
         eps = 1e-6
         y_pred = torch.clamp(y_pred, eps, 1 - eps)
-        tmp_pred = y_pred
+        preds[index] = y_pred
+        # preds[index, 0] = 1 - y_pred
+        # preds[index, 1] = y_pred
 
+        targets[index] = target
+
+    end_infer = time.time()
+    print("Infer time", end_infer - start_infer)
+
+    neg_location = torch.where(targets == 0)[0]
+    pos_location = torch.where(targets == 1)[0]
+
+    if final_subset is None:
+        final_subset = torch.tensor([])
+    final_weight = torch.zeros(len(train_dataset), device=device)
+
+    n_choose = subset_size // batches
+    print(
+        f"Num Batches: {batches}"
+        f"| Each batch choose {n_choose} from {random_batch_size}"
+    )
+
+    start = 0
+    for _ in tqdm.tqdm(range(batches), ascii=True):
+
+        end = start + random_batch_size
+        tmp_index = generate_random_set(
+            random_batch_size, equal_num, neg_location, pos_location
+        )
+        tmp_index = tmp_index.to(device)
+
+        tmp_pred = preds[tmp_index]
         tmp_pred.requires_grad_(True)
-        loss = criterion_selflc(tmp_pred, target, total_step + 1)
+        loss = criterion_selflc(tmp_pred, targets[tmp_index], total_step + 1)
         # loss = tce_loss(tmp_pred, targets[tmp_index], drop_rate)
         gradient = torch.autograd.grad(loss, tmp_pred)[0]
         # gradient = tmp_pred - identity_matrix[targets[tmp_index]]
 
+        num_step = total_step + 1
         mom = (momentum * 0.9 + gradient * 0.1) / (1 - 0.9**num_step)
         var = (grad_var * 0.999 + gradient * gradient * 0.001) / (1 - 0.999**num_step)
         gradient = mom / (1e-6 + var.sqrt())
+        gradient = gradient.unsqueeze(-1)
 
-        # start choose coreset
-        pos_gradient = gradient.view(-1, random_batch_size // 2)[::2]
-        pos_index = index.view(-1, random_batch_size // 2)[::2]
-        n_batch = pos_gradient.shape[0]
-
-        pos_gradient = pos_gradient.unsqueeze(-1)
-
-        # Get list of item already selected
-        mask = torch.isin(pos_index, final_subset)
-        pos_subset = facility_location_torch_v2.faciliy_location_order(
-            pos_gradient, subset_size // 2 // batches, mask
+        subset, weight, *_ = facility_location_torch.get_orders_and_weights(
+            subset_size // batches,
+            # tmp_pred, "euclidean",
+            gradient,
+            "identity",
+            y=targets[tmp_index],
+            equal_num=equal_num,
+            mode="dense",
+            optimizer_function=CustomLazier(
+                tmp_index,
+                final_subset,
+            ),
+            verbose=False,
         )
 
-        pos_subset = pos_index[
-            torch.arange(n_batch).unsqueeze(-1), pos_subset
-        ].flatten()
+        true_idx = tmp_index[subset]
+        # final_subset.append(true_idx)
+        final_subset = torch.concat([final_subset, true_idx])
 
-        # Repeat for negative
-        neg_gradient = gradient.view(-1, random_batch_size // 2)[1::2]
-        neg_index = index.view(-1, random_batch_size // 2)[1::2]
-        n_batch = neg_gradient.shape[0]
+        # weight = torch.from_numpy(weight).to(device)
+        # final_weight[true_idx] += weight
 
-        neg_gradient = neg_gradient.unsqueeze(-1)
+        start = end
 
-        mask = torch.isin(neg_index, final_subset)
-        neg_subset = facility_location_torch_v2.faciliy_location_order(
-            neg_gradient, subset_size // 2 // batches, mask
-        )
-        neg_subset = neg_index[
-            torch.arange(n_batch).unsqueeze(-1), neg_subset
-        ].flatten()
-
-        final_subset = torch.concat([final_subset, pos_subset, neg_subset])
-
-    final_weight = None
     # return torch.unique(torch.concat(final_subset)).cpu(), final_weight
     # Note: Final Weight is currently implement wrong. Please dont use
     return final_subset, final_weight
 
 
 # k = int(data_size * len(train_dataset) / 0.9)
-# k = int(data_size * len(train_dataset) / 0.9)
 k = int(data_size * len(train_dataset) / 0.9)
+# k = int(data_size * len(train_dataset))
 if args.debug:
     batches = 33
     batch_size = int(len(train_dataset) / batches)
@@ -352,12 +333,10 @@ else:
         batches = 99 * int(data_size / 0.02)
     if data_size in [0.01, 0.05, 0.1]:
         batches = 99 * int(data_size / 0.01)
-        # batches = 40 * int(data_size / 0.01)
     else:
         batches = 48
     # batches = 1000
     batch_size = 16384 * 2
-    # batch_size = 16384 * 2
     # batch_size = 16384 * 3
 
 n_splits = 3
@@ -465,6 +444,7 @@ start = 0
 total_step = 0
 
 equal_num = True
+# equal_num = False
 
 intervals = 1
 if args.arch == "dcnv2" and args.dataset == "criteo_cl":
@@ -520,6 +500,7 @@ for epoch in range(100):
     total_step += step
 
     # Find extra set
+    # if epoch in [2, 3, 6] and count < n_splits:
     if (epoch + 1) % intervals == 0 and count < n_splits:
         if count == n_splits - 1:
             k_size = k - len(final_subset)
@@ -528,6 +509,7 @@ for epoch in range(100):
         final_subset, weight = find_top_grad(
             train_dataset,
             k_size,
+            # k * 2 // 5,
             model,
             batches // n_splits,
             batch_size,
@@ -537,6 +519,7 @@ for epoch in range(100):
         dataset = Subset(train_dataset, final_subset.cpu())
         train_loader = DataLoader(dataset, 8192, True, num_workers=4)
         count += 1
+        # torch.save(final_subset, "subset_crest.pth")
 
     # Validation
     model.eval()
@@ -549,26 +532,23 @@ for epoch in range(100):
     all_y_true = []
     all_y_pred = []
 
-    if epoch > n_epoches - 3:
-        for idx, batch in enumerate(val_loader):
-            inputs, labels, _ = batch
-            all_y_true.extend(labels.tolist())
+    for idx, batch in enumerate(val_loader):
+        inputs, labels, _ = batch
+        all_y_true.extend(labels.tolist())
 
-            inputs = inputs.to(device)
-            labels = labels.to(device)
+        inputs = inputs.to(device)
+        labels = labels.to(device)
 
-            with torch.no_grad():
-                outputs = model(inputs)
+        with torch.no_grad():
+            outputs = model(inputs)
 
-            log_loss += criterion(outputs, labels.float()).item()
+        log_loss += criterion(outputs, labels.float()).item()
 
-            outputs = torch.sigmoid(outputs)
-            all_y_pred.extend(outputs.cpu().tolist())
-        auc = roc_auc_score(all_y_true, all_y_pred)
-        log_loss = log_loss / len(all_y_pred)
-    else:
-        auc = 0.5
-        log_loss = 1.0
+        outputs = torch.sigmoid(outputs)
+        all_y_pred.extend(outputs.cpu().tolist())
+
+    auc = roc_auc_score(all_y_true, all_y_pred)
+    log_loss = log_loss / len(all_y_pred)
 
     improve = False
     if auc > best_auc:
@@ -596,7 +576,7 @@ for epoch in range(100):
     writer.add_scalar("val/auc", auc, total_step)
     writer.add_scalar("best_auc", auc, total_step)
 
-    if not improve and epoch >= n_epoches:
+    if not improve and epoch > n_epoches:
         break
 
 

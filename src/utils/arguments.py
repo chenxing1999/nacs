@@ -32,6 +32,7 @@ def get_args(argv=None):
     parser.add_argument("--subset_path")
     parser.add_argument("--loss")
     parser.add_argument("--n_splits", type=int)
+    parser.add_argument("--data_size", type=float)
 
     parser.add_argument("--data_dir", default="~/data")
     parser.add_argument(
