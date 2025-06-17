@@ -8,9 +8,9 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "IDontKnow"
+name = "NaCS"
 description = "Code for noise-aware coreset selection"
-authors = [{name = "Hung Tran", email = "tranvinhhung99@gmail.com"}]
+authors = []
 license = {file = "LICENSE"}
 dependencies = [
     "numpy",
