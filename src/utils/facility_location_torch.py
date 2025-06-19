@@ -324,7 +324,6 @@ def faciliy_location_order_new(
 ):
     class_indices = np.where(y == c)[0]
     X = X[class_indices]
-    X.shape[0]
 
     if mode == "dense":
         num_n = None
