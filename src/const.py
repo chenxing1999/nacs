@@ -11,6 +11,12 @@ AVAZU_DATASET_CONFIG = dict(
     cache_path="dataset/avazu/avazu-fm",
 )
 
+KDD_DATASET_CONFIG = dict(
+    train_test_info="dataset/kdd/preprocessed/train_test_val_info.bin",
+    dataset_path="dataset/kdd/train.txt",
+    cache_path=".kdd"
+)
+
 
 """
 Weight Decay note

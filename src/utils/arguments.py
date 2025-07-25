@@ -46,6 +46,7 @@ def get_args(argv=None):
             "avazu",
             "criteo_cl",
             "avazu_cl",
+            "kdd",
         ],
         help="dataset: " + " (default: cifar10)",
     )
@@ -255,13 +256,14 @@ def get_args(argv=None):
 
     args = parser.parse_args(argv)
 
+    CTR_DATASETS = ["criteo", "avazu", "criteo_cl", "avazu_cl", "kdd"]
     if args.dataset == "cifar10":
         args.num_classes = 10
     elif args.dataset == "cifar100":
         args.num_classes = 100
     elif args.dataset == "tinyimagenet":
         args.num_classes = 200
-    elif args.dataset in ["criteo", "avazu", "criteo_cl", "avazu_cl"]:
+    elif args.dataset in CTR_DATASETS:
         args.num_classes = 2
         args.infer_batch_size = 4096
     else:

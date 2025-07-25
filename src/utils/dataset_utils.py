@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import ConcatDataset, Subset
+from typing import List
 
 from src.datasets import IndexedDataset
 

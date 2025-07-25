@@ -21,7 +21,7 @@ dependencies = [
     "optuna",
     "psutil",
     "scikit-learn",
-    "lmdb",
+    "lmdb<1.7", # 1.7.2 cause segmentation fault in multi-thread
 ]
 dynamic = ["version"]
 

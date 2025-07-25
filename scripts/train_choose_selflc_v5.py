@@ -18,6 +18,9 @@ from src.utils import facility_location_torch_v2, get_args
 from src.utils.selflc import ProSelfLC
 
 start_time = time.time()
+# Stability computation constant
+# Set to 5e-8 for KDD dataset
+EPS = 1e-6 
 
 
 # Use CUDA if available and set random seed for reproducibility
@@ -285,7 +288,7 @@ def find_top_grad(
             logit = model(data)
 
         y_pred = torch.sigmoid(logit)
-        eps = 1e-6
+        eps = EPS
         y_pred = torch.clamp(y_pred, eps, 1 - eps)
         tmp_pred = y_pred
 
@@ -408,7 +411,7 @@ def train_epoch_simple2(
         target = target.to(device)
 
         y_pred = torch.sigmoid(model(data))
-        eps = 1e-6
+        eps = EPS
         y_pred = torch.clamp(y_pred, eps, 1 - eps)
 
         loss = criterion(

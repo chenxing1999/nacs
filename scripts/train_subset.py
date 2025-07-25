@@ -22,6 +22,8 @@ from src.utils.selflc import ProSelfLC
 args = get_args()
 args.seed = 42
 
+EPS = 1e-6 # Set to 5e-8 for KDD
+
 # run_name = input("Run name: ")
 run_name = "subset"
 writer = SummaryWriter(f"logs/{run_name}")
@@ -52,7 +54,7 @@ train_loader = DataLoader(
 )
 val_loader = torch.utils.data.DataLoader(
     IndexedDataset(args, split="val"),
-    batch_size=4096,
+    batch_size=8192,
     shuffle=False,
     num_workers=args.num_workers,
     pin_memory=True,
@@ -63,14 +65,19 @@ model = get_model(train_dataset, args.arch)
 model = model.to(device)
 optimizer = torch.optim.Adam(
     model.parameters(),
+    # 0.01,
     0.01,
-    weight_decay=5e-4,
+    weight_decay=args.weight_decay,
 )
 print(optimizer)
 
 
+# KDD - DFM - 1% beta=15--AUC:0.7444
+beta_list = {"kdd": 20, "criteo": 25, "avazu": 20}
+beta = beta_list[args.dataset]
+
 criterion_selflc = ProSelfLC(
-    25 * len(train_loader),
+    beta * len(train_loader),
     16,
     0.5,
     False,
@@ -89,6 +96,8 @@ if args.dataset == "criteo":
     pos_weight = 1 / (27277461 / 9395032)
 elif args.dataset == "avazu":
     pos_weight = 5491354 / 26851819
+elif args.dataset == "kdd":
+    pos_weight = 5326610 / 114384674
 else:
     raise ValueError()
 
@@ -108,7 +117,7 @@ def train_epoch_simple(train_loader, model, optimizer):
 
         if args.loss == "selflc":
             y_pred = torch.sigmoid(y_pred)
-            eps = 1e-6
+            eps = EPS
             y_pred = torch.clamp(y_pred, eps, 1 - eps)
             loss = criterion_selflc(
                 y_pred,
@@ -211,7 +220,7 @@ model.eval()
 
 val_loader = torch.utils.data.DataLoader(
     IndexedDataset(args, split="test"),
-    batch_size=4096,
+    batch_size=8192,
     shuffle=False,
     num_workers=args.num_workers,
     pin_memory=True,
