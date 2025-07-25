@@ -23,4 +23,8 @@ Weight Decay note
        |0.5  |1   |5
 Criteo |5e-4 |5e-4|1e-5
 Avazu  |5e-4 |5e-4|1e-5
+
+For KDD|0.5|1   |5
+DCNv2 |5e-5|1e-5|5e-7
+DeepFM|5e-5|5e-6|5e-7
 """

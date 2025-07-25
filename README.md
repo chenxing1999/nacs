@@ -52,7 +52,8 @@ python scripts/train_subset.py --arch dcnv2 \
      --dataset criteo \
      --subset_path outputs/dcnv2-criteo-0.01-v2-ablation/hyperparam-test.pth \
      --loss selflc \
-     --batch_size 8192
+     --batch_size 8192 \
+     --weight_decay 5e-4
 ```
 
 Note: The weight decay is different between data size.
