@@ -26,7 +26,7 @@ def faciliy_location_order(X: torch.Tensor, num_per_class, mask=None):
     # const = dists.max(dim=1, keepdims=True)
     const = 1
     # sims = const - dists
-    sims = dists.sub_(const).mul_(-1) # Use this for KDD
+    sims = dists.sub_(const).mul_(-1)  # Use this for KDD
 
     eps = 1e-3
     s = int(batch_size * math.log(1 / eps) / num_per_class)

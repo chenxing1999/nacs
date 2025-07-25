@@ -22,7 +22,7 @@ from src.utils.selflc import ProSelfLC
 args = get_args()
 args.seed = 42
 
-EPS = 1e-6 # Set to 5e-8 for KDD
+EPS = 1e-6  # Set to 5e-8 for KDD
 
 # run_name = input("Run name: ")
 run_name = "subset"

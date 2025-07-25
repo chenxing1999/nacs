@@ -20,7 +20,7 @@ from src.utils.selflc import ProSelfLC
 start_time = time.time()
 # Stability computation constant
 # Set to 5e-8 for KDD dataset
-EPS = 1e-6 
+EPS = 1e-6
 
 
 # Use CUDA if available and set random seed for reproducibility

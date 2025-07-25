@@ -8,6 +8,7 @@ def get_entropy(pred_probs):
         pred_probs * torch.log(pred_probs)
         + (1 - pred_probs) * torch.log(1 - pred_probs)
     )
+    # entropy[torch.isnan(entropy)] = 0
     return entropy
 
 
