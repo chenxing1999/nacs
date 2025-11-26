@@ -101,7 +101,7 @@ easiness = torch.from_numpy(idx).to("cuda")
 end_hard = int(len(idx) * 0.9)
 noisy_indices = easiness[end_hard:]
 not_noisy = easiness[:end_hard]
-mask = torch.isin(crest_subset, noisy_indices, assume_unique=True)
+mask = torch.isin(i, noisy_indices, assume_unique=True)
 
 percent = len(not_noisy) / len(train_dataset) * 100
 print("Total data:", len(not_noisy), f"{percent:.2f}% of training data")
