@@ -19,7 +19,11 @@ def _get_field_dims(dataset):
     return field_dims
 
 
-def get_count(loader):
+def get_count(loader, exact=False):
+    """
+    Args:
+        if not exact, will simply return if features exist or not
+    """
     field_dims = _get_field_dims(loader.dataset)
 
     field_dims_tensor = torch.tensor(field_dims)
@@ -32,12 +36,24 @@ def get_count(loader):
     offsets = torch.cumsum(field_dims_tensor[:-1], 0).unsqueeze(0)
     offsets = offsets.to(device)
 
-    count = torch.zeros(n_fields, device=device)
+    if exact:
+        count = torch.zeros(n_fields, device=device, dtype=torch.long)
+    else:
+        count = torch.zeros(n_fields, device=device)
+
     for data, target, idx in loader:
         data = data.to(device) + offsets
 
-        # torch.index_add(count, 0, data, torch.tensor(1, device=device))
-        count[data] += 1
+        data_flat = data.flatten()
+        if exact:
+            count.index_add_(
+                # count, 
+                0, 
+                data_flat, 
+                torch.ones_like(data_flat, device=device)
+            )
+        else:
+            count[data] += 1
 
     return count
 
