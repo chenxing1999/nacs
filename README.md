@@ -1,5 +1,8 @@
 # Quick start
 
+The code for paper Efficient Content-based Recommendation Model Training via Noise-aware Coreset Selection (WWW'26) -- [arxiv](https://arxiv.org/pdf/2601.10067)
+
+
 ## Setup
 
 1. Create a virtual environment
@@ -58,6 +61,19 @@ python scripts/train_subset.py --arch dcnv2 \
 
 Note: The weight decay is different between data size.
 Go to file `src/const.py` for weight decay search results.
+
+# Citations
+
+If you find this repo helpful, please cite the below paper:
+```
+@article{tran2026efficient,
+  title={Efficient Content-based Recommendation Model Training via Noise-aware Coreset Selection},
+  author={Tran, Hung Vinh and Chen, Tong and Wen, Hechuan and Nguyen, Quoc Viet Hung and Cui, Bin and Yin, Hongzhi},
+  journal={arXiv preprint arXiv:2601.10067},
+  year={2026}
+}
+```
+
 
 # Acknowledgement
 
